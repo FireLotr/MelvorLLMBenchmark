@@ -1,0 +1,25 @@
+{
+  "skills": [
+    "Attack",
+    "Strength",
+    "Defence",
+    "Hitpoints",
+    "Farming",
+    "Woodcutting",
+    "Fishing",
+    "Firemaking",
+    "Cooking",
+    "Mining",
+    "Smithing"
+  ],
+  "dungeons": [
+    "Chicken Coop",
+    "Undead Graveyard",
+    "Bandit Base",
+    "Hall of Wizards",
+    "Spider Forest",
+    "Deep Sea Ship",
+    "Frozen Cove",
+    "Volcanic Cave"
+  ]
+}

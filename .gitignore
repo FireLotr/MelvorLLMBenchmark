@@ -1,0 +1,17 @@
+# Screenshots
+screenshots/
+
+# Logs
+logs/
+
+# Error log
+error.txt
+
+# Venv
+venv/
+
+# Thoughts
+thoughts/
+
+# .claude
+.claude
