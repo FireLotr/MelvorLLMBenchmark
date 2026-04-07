@@ -15,3 +15,6 @@ thoughts/
 
 # .claude
 .claude
+
+# Pycache
+__pycache__/
