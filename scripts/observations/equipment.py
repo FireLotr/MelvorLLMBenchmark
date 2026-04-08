@@ -70,7 +70,26 @@ def read_equipment(mode: str) -> bool:
                     itemName: f?.item?.name ?? "",
                     qty: Number(f?.quantity ?? 0),
                 }));
-                return { ok: true, equipment: eq, food };
+                let activeFoodSlot = null;
+                const asSlotNum = (v) => {
+                    const n = Number(v);
+                    if (Number.isFinite(n) && n >= 0 && n < 3) return n + 1;
+                    if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                    return null;
+                };
+                for (const v of [p.food?.selectedSlot, p.food?.currentSlot, p.food?.activeSlot]) {
+                    const s = asSlotNum(v);
+                    if (s) { activeFoodSlot = s; break; }
+                }
+                if (!activeFoodSlot) {
+                    const sid = String(p?.selectedFood?.slot?.id ?? p?.selectedFood?.slotID ?? "");
+                    const m = sid.match(/(\\d+)/);
+                    if (m) {
+                        const n = Number(m[1]);
+                        if (Number.isFinite(n) && n >= 1 && n <= 3) activeFoodSlot = n;
+                    }
+                }
+                return { ok: true, equipment: eq, food, activeFoodSlot };
             }"""
         )
 
@@ -127,6 +146,11 @@ def read_equipment(mode: str) -> bool:
         print("-" * 66)
         for r in food_rows:
             print(f"{r['slot'][:24]:24} {r['item'][:30]:30} {r['qty']:>8,}")
+        active = data.get("activeFoodSlot")
+        if isinstance(active, (int, float)) and 1 <= int(active) <= 3:
+            print(f"\nActive Food Slot: {int(active)}")
+        else:
+            print("\nActive Food Slot: unknown")
 
     return True
 

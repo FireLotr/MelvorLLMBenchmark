@@ -129,6 +129,27 @@ def show_autoeat() -> bool:
                     triggerHp: Number(game.combat?.player?.autoEatThreshold ?? 0),
                     healTargetHp: Number(game.combat?.player?.autoEatHPLimit ?? 0),
                     efficiencyPct: Number(game.combat?.player?.autoEatEfficiency ?? 0),
+                    activeFoodSlot: (() => {
+                        const p = game?.combat?.player;
+                        const f = p?.food;
+                        const asSlotNum = (v) => {
+                            const n = Number(v);
+                            if (Number.isFinite(n) && n >= 0 && n < 3) return n + 1;
+                            if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                            return null;
+                        };
+                        for (const v of [f?.selectedSlot, f?.currentSlot, f?.activeSlot]) {
+                            const s = asSlotNum(v);
+                            if (s) return s;
+                        }
+                        const sid = String(p?.selectedFood?.slot?.id ?? p?.selectedFood?.slotID ?? "");
+                        const m = sid.match(/(\\d+)/);
+                        if (m) {
+                            const n = Number(m[1]);
+                            if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                        }
+                        return null;
+                    })(),
                 };
             }"""
         )
@@ -166,6 +187,11 @@ def show_autoeat() -> bool:
         print(f"Heal Target: to {target_hp}/{max_hp} ({target_pct:.0f}%)")
     print(f"Current HP: {hp}/{max_hp}")
     print(f"Food Efficiency: {efficiency}")
+    active_slot = data.get("activeFoodSlot")
+    if isinstance(active_slot, (int, float)) and 1 <= int(active_slot) <= 3:
+        print(f"Active Food Slot: {int(active_slot)}")
+    else:
+        print("Active Food Slot: unknown")
     return True
 
 
@@ -210,6 +236,26 @@ def show_stats() -> bool:
                     damageReduction: dr,
                     hp: Number(p?.hitpoints ?? 0),
                     maxHp: Number(s?._maxHitpoints ?? 0),
+                    activeFoodSlot: (() => {
+                        const f = p?.food;
+                        const asSlotNum = (v) => {
+                            const n = Number(v);
+                            if (Number.isFinite(n) && n >= 0 && n < 3) return n + 1;
+                            if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                            return null;
+                        };
+                        for (const v of [f?.selectedSlot, f?.currentSlot, f?.activeSlot]) {
+                            const s2 = asSlotNum(v);
+                            if (s2) return s2;
+                        }
+                        const sid = String(p?.selectedFood?.slot?.id ?? p?.selectedFood?.slotID ?? "");
+                        const m = sid.match(/(\\d+)/);
+                        if (m) {
+                            const n = Number(m[1]);
+                            if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                        }
+                        return null;
+                    })(),
                 };
             }"""
         )
@@ -230,6 +276,11 @@ def show_stats() -> bool:
         print("Damage Reduction: N/A")
     else:
         print(f"Damage Reduction: {float(data['damageReduction']):.2f}%")
+    active_slot = data.get("activeFoodSlot")
+    if isinstance(active_slot, (int, float)) and 1 <= int(active_slot) <= 3:
+        print(f"Active Food Slot: {int(active_slot)}")
+    else:
+        print("Active Food Slot: unknown")
     return True
 
 

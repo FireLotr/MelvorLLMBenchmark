@@ -73,12 +73,46 @@ def _ensure_farming_page(page: Page) -> bool:
 
 
 def _select_category(page: Page, category_label: str) -> bool:
-    cat_btn = page.locator("farming-category-button").filter(has_text=category_label).first
-    if not cat_btn.is_visible():
+    target = " ".join((category_label or "").lower().split())
+    buttons = page.locator("farming-category-button")
+    chosen = None
+    for i in range(buttons.count()):
+        b = buttons.nth(i)
+        try:
+            if not b.is_visible():
+                continue
+            raw = (b.text_content() or "").strip().lower()
+            # card includes description lines; use first non-empty line as label
+            first_line = next((ln.strip() for ln in raw.splitlines() if ln.strip()), "")
+            txt = " ".join(first_line.split())
+            if txt == target:
+                chosen = b
+                break
+        except Exception:
+            continue
+    if chosen is None:
         print(f"Category '{category_label}' not visible.")
         return False
-    cat_btn.click()
-    page.wait_for_timeout(400)
+    chosen.click()
+    page.wait_for_timeout(450)
+    # Verify selected category by checking active button text.
+    active = None
+    for i in range(buttons.count()):
+        b = buttons.nth(i)
+        try:
+            if not b.is_visible():
+                continue
+            cls = b.get_attribute("class") or ""
+            if "btn-primary" in cls or "active" in cls:
+                raw = (b.text_content() or "").strip().lower()
+                first_line = next((ln.strip() for ln in raw.splitlines() if ln.strip()), "")
+                active = " ".join(first_line.split())
+                break
+        except Exception:
+            continue
+    if active and active != target:
+        print(f"Category switch mismatch (wanted '{category_label}', got '{active}').")
+        return False
     return True
 
 
@@ -98,6 +132,13 @@ def _visible_plot_indices(locator) -> list[int]:
 def _get_unlocked_plot(page: Page, plot_index: int):
     unlocked = page.locator("farming-plot:not(.d-none)")
     vis = _visible_plot_indices(unlocked)
+    # Category tab switches can leave a short transient where visible plots read as zero.
+    if not vis:
+        for _ in range(4):
+            page.wait_for_timeout(150)
+            vis = _visible_plot_indices(unlocked)
+            if vis:
+                break
     if plot_index < 1 or plot_index > len(vis):
         print(f"Plot {plot_index} not found (only {len(vis)} unlocked plot(s) in this category).")
         return None
@@ -147,6 +188,19 @@ def _plot_ready(plot_el) -> bool:
 def _plot_empty(plot_el) -> bool:
     btn = plot_el.locator(".block-content .btn-success").filter(has_text="Plant a Seed").first
     return btn.count() > 0 and btn.is_visible()
+
+
+def _plot_dead(plot_el) -> bool:
+    dead_btns = plot_el.locator("button.btn-lg").filter(
+        has_text=re.compile(r"clear\s*dead\s*crop|destroy", re.IGNORECASE)
+    )
+    for i in range(dead_btns.count()):
+        try:
+            if dead_btns.nth(i).is_visible():
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def _use_seed_modal(page: Page, trigger_click, seed_name: str, context: str) -> bool:
@@ -224,7 +278,33 @@ def cmd_harvest_all(page: Page, category_label: str) -> bool:
         print(f"No plots are ready to harvest in {category_label}.")
         return False
 
-    btn.click()
+    clicked = False
+    try:
+        btn.click(timeout=1500)
+        clicked = True
+    except Exception:
+        pass
+    if not clicked:
+        try:
+            btn.click(force=True, timeout=1500)
+            clicked = True
+        except Exception:
+            pass
+    if not clicked:
+        # Final fallback when overlay/interception blocks Playwright pointer events.
+        clicked = bool(
+            page.evaluate(
+                """(el) => {
+                    if (!el || typeof el.click !== "function") return false;
+                    el.click();
+                    return true;
+                }""",
+                btn.element_handle(),
+            )
+        )
+    if not clicked:
+        print(f"Could not click clear button for plot {plot}.")
+        return False
     page.wait_for_timeout(400)
 
     ready_after = 0
@@ -486,12 +566,46 @@ def cmd_clear(page: Page, plot: int, category_label: str) -> bool:
         print(f"Plot {plot} is still growing — use 'clear' only on dead crops.")
         return False
 
-    btn = plot_el.locator(".btn-lg.btn-danger").first
-    if btn.count() == 0 or "d-none" in (btn.get_attribute("class") or ""):
+    was_dead = _plot_dead(plot_el)
+    # Current UI uses "Clear Dead Crop" as a warning button; keep a destroy fallback for older layouts.
+    candidates = plot_el.locator("button.btn-lg").filter(
+        has_text=re.compile(r"clear\s*dead\s*crop|destroy", re.IGNORECASE)
+    )
+    btn = None
+    for i in range(candidates.count()):
+        c = candidates.nth(i)
+        if c.is_visible():
+            btn = c
+            break
+    if btn is None:
         print(f"Plot {plot} has no dead crop to clear.")
         return False
-    btn.click()
-    page.wait_for_timeout(400)
+    clicked = False
+    try:
+        btn.click(timeout=1500)
+        clicked = True
+    except Exception:
+        pass
+    if not clicked:
+        try:
+            btn.click(force=True, timeout=1500)
+            clicked = True
+        except Exception:
+            pass
+    if not clicked:
+        try:
+            handle = btn.element_handle()
+            if handle is not None:
+                clicked = bool(page.evaluate("(el) => { el.click(); return true; }", handle))
+        except Exception:
+            clicked = False
+    if not clicked:
+        print(f"Could not click clear button for plot {plot}.")
+        return False
+    page.wait_for_timeout(900)
+    if was_dead and _plot_dead(plot_el):
+        print(f"Clear clicked, but plot {plot} still appears dead. Try again.")
+        return False
     print(f"Cleared dead crop from plot {plot} ({category_label}).")
     return True
 

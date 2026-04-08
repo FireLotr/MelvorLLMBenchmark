@@ -11,6 +11,7 @@ Usage:
   python scripts/actions/combat.py loot                # collect loot without stopping combat
   python scripts/actions/combat.py stop                # stop combat and collect loot
   python scripts/actions/combat.py unequip food 1      # unequip food from slot 1 (1-3); fails early if bank full
+  python scripts/actions/combat.py food slot 2         # set active combat food slot (1-3)
   python scripts/actions/combat.py style stab          # set attack style (stab/slash/block)
   python scripts/actions/combat.py dungeon-eat "chicken coop" 35 [interval_ms]  # see README: prefer combat.py stop, then kill monitor
 
@@ -304,6 +305,95 @@ def _food_slot_is_empty(page: Page, slot: int) -> bool:
         return False
 
 
+def _active_food_slot(page: Page) -> int | None:
+    """Best-effort read of currently active combat food slot (1-3)."""
+    try:
+        data = page.evaluate(
+            """() => {
+                const p = game?.combat?.player;
+                const f = p?.food;
+                if (!f) return null;
+                const slots = f.slots ?? [];
+
+                const asSlotNum = (v) => {
+                    const n = Number(v);
+                    if (Number.isFinite(n) && n >= 0 && n < 3) return n + 1; // 0-based -> 1-based
+                    if (Number.isFinite(n) && n >= 1 && n <= 3) return n;    // already 1-based
+                    return null;
+                };
+
+                // Direct fields first.
+                for (const v of [f.selectedSlot, f.currentSlot, f.activeSlot]) {
+                    const s = asSlotNum(v);
+                    if (s) return s;
+                }
+
+                // selectedFood may carry slot metadata.
+                const sf = p?.selectedFood;
+                const sid = String(sf?.slot?.id ?? sf?.slotID ?? "");
+                const m = sid.match(/(\\d+)/);
+                if (m) {
+                    const n = Number(m[1]);
+                    if (Number.isFinite(n) && n >= 1 && n <= 3) return n;
+                }
+
+                // Match selected food object to slots by item+qty (first match).
+                const sfID = String(sf?.item?.id ?? "");
+                const sfQty = Number(sf?.quantity ?? NaN);
+                if (sfID) {
+                    for (let i = 0; i < slots.length; i++) {
+                        const s = slots[i];
+                        const id = String(s?.item?.id ?? "");
+                        const q = Number(s?.quantity ?? NaN);
+                        if (id && id === sfID && (!Number.isFinite(sfQty) || q === sfQty)) return i + 1;
+                    }
+                    for (let i = 0; i < slots.length; i++) {
+                        if (String(slots[i]?.item?.id ?? "") === sfID) return i + 1;
+                    }
+                }
+                return null;
+            }"""
+        )
+        if isinstance(data, (int, float)):
+            n = int(data)
+            if 1 <= n <= 3:
+                return n
+    except Exception:
+        pass
+    return None
+
+
+def _current_dungeon_name(page: Page) -> str | None:
+    """Return dungeon name if current combat context is a dungeon, else None."""
+    try:
+        name = page.evaluate(
+            """() => {
+                const c = game?.combat;
+                const direct = c?.dungeon?.name ?? null;
+                if (direct) return String(direct);
+                const areaName =
+                    c?.selectedArea?.name ??
+                    c?.player?.combatArea?.name ??
+                    c?.player?.manager?.selectedArea?.name ??
+                    null;
+                if (!areaName) return null;
+                const norm = (s) => String(s ?? "").toLowerCase().replace(/\\s+/g, " ").trim();
+                const an = norm(areaName);
+                for (const d of (game?.dungeons?.allObjects ?? [])) {
+                    const dn = norm(d?.name);
+                    const di = norm(d?.id);
+                    if ((dn && dn === an) || (di && di === an)) return d?.name ?? String(areaName);
+                }
+                return null;
+            }"""
+        )
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    except Exception:
+        pass
+    return None
+
+
 def _bank_is_full(page: Page) -> bool | None:
     """True if the bank has no room for another stack (unequip food needs bank space). None if unknown."""
     try:
@@ -569,6 +659,86 @@ def unequip_food(arg: str) -> bool:
             "Close other dropdowns and try again, or unequip from the in-game food menu manually."
         )
         page.keyboard.press("Escape")
+        return False
+
+
+def set_food_slot(arg: str) -> bool:
+    """Set active combat food slot to 1-3."""
+    parts = arg.split()
+    slot = None
+    for tok in reversed(parts):
+        if tok.isdigit():
+            slot = int(tok)
+            break
+    if slot is None:
+        print("Usage: python scripts/actions/combat.py food slot <1|2|3>")
+        return False
+    if slot < 1 or slot > 3:
+        print("Food slot must be 1, 2, or 3.")
+        return False
+
+    with sync_playwright() as pw:
+        page = get_melvor_page(pw)
+        if not is_on_combat_page(page):
+            print("Not on the Combat page. Run: python scripts/actions/navigate.py combat")
+            return False
+        scope = _combat_food_scope(page)
+        if scope.count() == 0:
+            print("Could not find the combat food UI (#combat-food-select / #combat-food-container).")
+            return False
+
+        before = _active_food_slot(page)
+        if before == slot:
+            print(f"Combat food slot {slot} is already active.")
+            return True
+        dungeon_name = _current_dungeon_name(page)
+        if dungeon_name:
+            print(f"Cannot change active food slot during a dungeon ({dungeon_name}).")
+            return False
+
+        if not _open_combat_food_dropdown(page, scope):
+            print("Could not open the combat food dropdown.")
+            return False
+        page.wait_for_timeout(220)
+        try:
+            scope.locator(".dropdown-menu.show").first.wait_for(state="visible", timeout=3000)
+        except Exception:
+            pass
+        menu = scope.locator(".dropdown-menu.show").first
+
+        selected = _click_first_visible(
+            [
+                menu.locator("button").filter(has_text=f"Slot {slot}"),
+                menu.locator("a").filter(has_text=f"Slot {slot}"),
+                menu.locator("button").filter(has_text=f"Food {slot}"),
+                menu.locator("a").filter(has_text=f"Food {slot}"),
+            ]
+        )
+        if not selected:
+            opts = menu.locator("button, a")
+            vis = []
+            for i in range(min(opts.count(), 40)):
+                o = opts.nth(i)
+                if not o.is_visible():
+                    continue
+                label = (o.text_content() or "").strip().lower()
+                if "unequip" in label:
+                    continue
+                vis.append(o)
+            if len(vis) >= slot:
+                vis[slot - 1].click()
+                selected = True
+        if not selected:
+            print(f"Could not select food slot {slot} in the combat food menu.")
+            page.keyboard.press("Escape")
+            return False
+
+        page.wait_for_timeout(300)
+        after = _active_food_slot(page)
+        if after == slot:
+            print(f"Set active combat food slot to {slot}.")
+            return True
+        print(f"Tried to set food slot {slot}, but active slot is {after if after else 'unknown'}.")
         return False
 
 
@@ -966,6 +1136,12 @@ if __name__ == "__main__":
     elif low.startswith("unequip food"):
         before = take_action_screenshot("before", f"combat_{low}")
         ok = unequip_food(arg)
+        after = take_action_screenshot("after", f"combat_{low}")
+        log_action_result("combat.py", sys.argv[1:], ok, before, after)
+        sys.exit(0 if ok else 1)
+    elif low.startswith("food slot"):
+        before = take_action_screenshot("before", f"combat_{low}")
+        ok = set_food_slot(arg)
         after = take_action_screenshot("after", f"combat_{low}")
         log_action_result("combat.py", sys.argv[1:], ok, before, after)
         sys.exit(0 if ok else 1)

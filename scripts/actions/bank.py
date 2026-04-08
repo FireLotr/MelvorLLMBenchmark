@@ -170,7 +170,7 @@ def find_and_click_item(page: Page, item_name: str) -> bool:
             print(f"Item not found in bank: '{item_name}'")
             return False
         print(f"Found: {id_to_name(target_id)} ({target_id})")
-        item = page.locator(f'[data-item-id="{target_id}"]')
+        item = page.locator(f'bank-item-icon[data-item-id="{target_id}"]')
         item.click()
         _wait_bank_item_panel_open(page, item)
         return True
@@ -209,7 +209,7 @@ def find_and_click_item(page: Page, item_name: str) -> bool:
             return False
 
     print(f"Found: {id_to_name(target_id)} ({target_id})")
-    item = page.locator(f'[data-item-id="{target_id}"]')
+    item = page.locator(f'bank-item-icon[data-item-id="{target_id}"]')
     item.click()
     _wait_bank_item_panel_open(page, item)
     return True
@@ -726,6 +726,146 @@ def _click_equip_gear_dom(page: Page) -> str | None:
     return (label or "").strip() or None
 
 
+def _is_equipped_now(page: Page, item_name: str) -> bool:
+    key = " ".join((item_name or "").lower().split())
+    if not key:
+        return False
+    try:
+        return bool(
+            page.evaluate(
+                """(needle) => {
+                    const eq = game?.combat?.player?.equipment?.equippedArray ?? [];
+                    for (const row of eq) {
+                        const n = String(row?.item?.name ?? "").toLowerCase().replace(/\\s+/g, " ").trim();
+                        if (n && n === needle) return true;
+                    }
+                    return false;
+                }""",
+                key,
+            )
+        )
+    except Exception:
+        return False
+
+
+def _equip_failure_reason(page: Page, item_name: str) -> str:
+    key = " ".join((item_name or "").lower().split())
+    try:
+        info = page.evaluate(
+            """(needle) => {
+                const norm = (s) => String(s ?? "").toLowerCase().replace(/\\s+/g, " ").trim();
+                const out = {
+                    inDungeon: false,
+                    dungeonName: null,
+                    inCombat: false,
+                    reqsMet: null,
+                    reqText: [],
+                };
+                const c = game?.combat;
+                out.inCombat = !!c?.isActive;
+                out.inDungeon = !!c?.dungeon;
+                out.dungeonName = c?.dungeon?.name ?? null;
+                const areaName =
+                    c?.dungeon?.name ??
+                    c?.selectedArea?.name ??
+                    c?.player?.combatArea?.name ??
+                    c?.player?.manager?.selectedArea?.name ??
+                    null;
+                // Some game states do not populate combat.dungeon; fallback by name/id match.
+                if (!out.inDungeon && areaName) {
+                    const dungeons = game?.dungeons?.allObjects ?? [];
+                    const norm = (s) => String(s ?? "").toLowerCase().replace(/\\s+/g, " ").trim();
+                    const areaNorm = norm(areaName);
+                    const hit = dungeons.find((d) => {
+                        const dn = norm(d?.name);
+                        const di = norm(d?.id);
+                        return (dn && dn === areaNorm) || (di && di === areaNorm);
+                    });
+                    if (hit) {
+                        out.inDungeon = true;
+                        out.dungeonName = hit?.name ?? areaName;
+                    }
+                }
+
+                const entries =
+                    game?.bank?.items instanceof Map
+                        ? Array.from(game.bank.items.values())
+                        : (game?.bank?.items?.allObjects ?? game?.bank?.items ?? []);
+                const hit = entries.find((e) => norm(e?.item?.name) === needle)?.item ?? null;
+                if (!hit) return out;
+
+                const flattenReqNodes = (n, acc) => {
+                    if (n == null) return;
+                    if (typeof n === "string") {
+                        acc.push(n);
+                        return;
+                    }
+                    if (Array.isArray(n)) {
+                        for (const x of n) flattenReqNodes(x, acc);
+                        return;
+                    }
+                    if (typeof n === "object") {
+                        if (typeof n.textContent === "string" && n.textContent.trim()) {
+                            acc.push(n.textContent);
+                            return;
+                        }
+                        if (typeof n.innerText === "string" && n.innerText.trim()) {
+                            acc.push(n.innerText);
+                            return;
+                        }
+                        if (n.data != null) acc.push(String(n.data));
+                        if (Array.isArray(n.children)) flattenReqNodes(n.children, acc);
+                    }
+                };
+
+                const reqs =
+                    hit?.equipRequirements ??
+                    hit?.equipmentRequirements ??
+                    hit?._equipRequirements ??
+                    hit?._defaultEquipRequirements ??
+                    [];
+                const reqList = Array.isArray(reqs) ? reqs : [];
+                if (typeof game?.checkRequirements === "function") {
+                    try {
+                        out.reqsMet = !!game.checkRequirements(reqList);
+                    } catch (e) {}
+                }
+                for (const req of reqList) {
+                    let txt = "";
+                    try {
+                        if (typeof req?.getNodes === "function") {
+                            const acc = [];
+                            flattenReqNodes(req.getNodes(), acc);
+                            txt = acc.join("").replace(/\\s+/g, " ").trim();
+                        }
+                    } catch (e) {}
+                    if (!txt && req?.type === "SkillLevel") {
+                        const sk = req.skill?.name ?? req.skill?.localID ?? req.skill ?? "";
+                        const lv = Number(req.level ?? req.skillLevel ?? req._level ?? NaN);
+                        if (sk && Number.isFinite(lv)) txt = `Requires ${sk} Level ${lv}`;
+                    }
+                    if (txt) out.reqText.push(txt);
+                }
+                return out;
+            }""",
+            key,
+        )
+    except Exception:
+        return "Equip click sent, but item is not equipped."
+
+    if info.get("inDungeon"):
+        dn = info.get("dungeonName")
+        if dn:
+            return f"Cannot equip while in dungeon combat ({dn}). Stop combat first."
+        return "Cannot equip while in dungeon combat. Stop combat first."
+    if info.get("reqsMet") is False:
+        reqs = info.get("reqText") or []
+        if reqs:
+            return f"Cannot equip due to unmet requirements: {'; '.join(reqs)}."
+        return "Cannot equip due to unmet level/skill requirements."
+    return "Equip click sent, but item is not equipped (game rejected equip)."
+
+
 def equip(item_name: str) -> bool:
     """Equip weapon/armour from bank (\"Equip to:\" only)."""
     with sync_playwright() as pw:
@@ -775,6 +915,11 @@ def equip(item_name: str) -> bool:
                 return False
 
             close_item_menu(page)
+            page.wait_for_timeout(250)
+            if not _is_equipped_now(page, item_name):
+                reason = _equip_failure_reason(page, item_name)
+                print(f"'{item_name}' not equipped: {reason}")
+                return False
             print(f"Equipped {item_name} ({slot_text}).")
             return True
         finally:
@@ -983,7 +1128,8 @@ def upgrade(item_name: str, qty: int | None) -> bool:
 
             if not _select_upgrade_quantity(page, qty):
                 print(
-                    f"Could not execute upgrade quantity {qty} using available upgrade modal controls."
+                    f"Could not execute upgrade quantity {qty} using available upgrade modal controls "
+                    "(you are likely missing some materials needed)."
                 )
                 return False
 
