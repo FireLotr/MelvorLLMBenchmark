@@ -131,6 +131,16 @@ BANK_ITEMS_JS = """() => {
     const inspectActions = (item) => {
       const itemName = String(item?.name ?? "");
       const typeName = String(item?.constructor?.name ?? "");
+      const isEquipment =
+        (typeof EquipmentItem !== "undefined" && item instanceof EquipmentItem) ||
+        typeName === "EquipmentItem" ||
+        typeName === "WeaponItem";
+      const isOpenable =
+        (typeof OpenableItem !== "undefined" && item instanceof OpenableItem) ||
+        typeName === "OpenableItem";
+      const isMasteryToken =
+        (typeof MasteryTokenItem !== "undefined" && item instanceof MasteryTokenItem) ||
+        typeName === "MasteryTokenItem";
       const slotNames = (() => {
         const slots = item?.validSlots;
         let arr = [];
@@ -147,21 +157,22 @@ BANK_ITEMS_JS = """() => {
       })();
       const upgradesRaw = bank?.itemUpgrades?.get?.(item) ?? [];
       const upgradesCount = Array.isArray(upgradesRaw) ? upgradesRaw.length : 0;
-      const canEquipFood = /food/i.test(typeName) || /\\b(food|shark|whale|lobster|shrimp|cake|soup|pizza)\\b/i.test(itemName);
+      const healing = readFoodHealing(item);
+      const canEquipFood =
+        (typeof FoodItem !== "undefined" && item instanceof FoodItem) ||
+        (Number.isFinite(healing) && healing > 0);
       const out = {
         canSell: getSalePrice(item) > 0,
         canUpgrade: upgradesCount > 0,
-        canOpen:
-          /openable/i.test(typeName) ||
-          /\\b(chest|crate|casket|nest|cache|satchel|box)\\b/i.test(itemName),
-        canEquip: slotCount > 0 || canEquipFood,
-        canClaim: /mastery token/i.test(itemName) || /masterytoken/i.test(typeName),
+        canOpen: isOpenable,
+        canEquip: isEquipment || slotCount > 0 || canEquipFood,
+        canClaim: isMasteryToken,
         canEquipFood,
         otherFeatures: [],
       };
       const extras = [];
       if (slotNames.length > 0) extras.push(`Equip Slots: ${slotNames.join(", ")}`);
-      if (/mastery token/i.test(itemName)) extras.push("Mastery Token");
+      if (isMasteryToken) extras.push("Mastery Token");
       if (out.canEquipFood) extras.push("Food");
       out.otherFeatures = Array.from(new Set(extras)).slice(0, 8);
       return out;
@@ -443,10 +454,22 @@ BANK_INFO_JS = """(query) => {
     };
     const itemName = String(item?.name ?? "");
     const typeName = String(item?.constructor?.name ?? "");
-    const canEquipFood = /food/i.test(typeName) || /\\b(food|shark|whale|lobster|shrimp|cake|soup|pizza)\\b/i.test(itemName);
-    out.canEquip = (Array.isArray(out.slots) && out.slots.length > 0) || canEquipFood;
-    out.canClaim = /mastery token/i.test(itemName) || /masterytoken/i.test(typeName);
-    out.canOpen = /openable/i.test(typeName) || /\\b(chest|crate|casket|nest|cache|satchel|box)\\b/i.test(itemName);
+    const isEquipment =
+      (typeof EquipmentItem !== "undefined" && item instanceof EquipmentItem) ||
+      typeName === "EquipmentItem" ||
+      typeName === "WeaponItem";
+    const isOpenable =
+      (typeof OpenableItem !== "undefined" && item instanceof OpenableItem) ||
+      typeName === "OpenableItem";
+    const isMasteryToken =
+      (typeof MasteryTokenItem !== "undefined" && item instanceof MasteryTokenItem) ||
+      typeName === "MasteryTokenItem";
+    const canEquipFood =
+      (typeof FoodItem !== "undefined" && item instanceof FoodItem) ||
+      (Number.isFinite(out.foodHealing) && out.foodHealing > 0);
+    out.canEquip = isEquipment || (Array.isArray(out.slots) && out.slots.length > 0) || canEquipFood;
+    out.canClaim = isMasteryToken;
+    out.canOpen = isOpenable;
     out.foodHealing = readFoodHealing(item);
     out.foodHealingRaw = readFoodHealingRaw(item);
     return { ok: true, item: out };
