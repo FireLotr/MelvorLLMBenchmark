@@ -308,17 +308,33 @@ def handle_action_call(page: Page, name: str, args: list[str]) -> dict[str, Any]
         if sub == "sellmulti":
             if len(args) < 3 or (len(args) - 1) % 2 != 0:
                 return {"ok": False, "error": "sellmulti expects repeated <item> <qty> pairs"}
-            results = []
+            sold = []
+            failed = []
             for i in range(1, len(args), 2):
+                item_name = args[i]
                 try:
                     qty = int(args[i + 1])
                 except Exception:
-                    return {"ok": False, "error": f"Invalid qty for {args[i]}"}
-                res = page.evaluate(BANK_SELL_JS, {"name": args[i], "qty": qty})
-                if not bool(res.get("ok")):
-                    return {"ok": False, "result": {"failed": args[i], "details": res, "done": results}}
-                results.append({"name": res.get("name", args[i]), "qty": int(res.get("qty", qty))})
-            return {"ok": True, "result": {"sold": results}}
+                    failed.append({"name": item_name, "qty": args[i + 1], "error": "Invalid qty"})
+                    continue
+                res = page.evaluate(BANK_SELL_JS, {"name": item_name, "qty": qty})
+                if bool((res or {}).get("ok")):
+                    sold.append({"name": (res or {}).get("name", item_name), "qty": int((res or {}).get("qty", qty))})
+                else:
+                    failed.append({
+                        "name": item_name,
+                        "qty": qty,
+                        "error": (res or {}).get("error", "sell failed"),
+                        "details": res,
+                    })
+            return {
+                "ok": len(failed) == 0,
+                "result": {
+                    "sold": sold,
+                    "failed": failed,
+                    "summary": {"requested": (len(args) - 1) // 2, "succeeded": len(sold), "failed": len(failed)},
+                },
+            }
         if sub == "equip":
             if len(args) < 2:
                 return {"ok": False, "error": "equip requires item name"}
