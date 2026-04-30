@@ -25,8 +25,14 @@ SMITHING_START_JS = """
     if (!recipe) return { ok:false, error:"recipe not found" };
     if (!s?.isMasteryActionUnlocked?.(recipe)) return { ok:false, error:`Recipe locked: ${recipe?.name ?? recipeName}` };
 
-    const selected = s?.selectedRecipe ?? null;
-    const active = s?.activeRecipe ?? null;
+    const getSelectedRecipeSafe = () => {
+        try { return s?.selectedRecipe ?? null; } catch (e) { return null; }
+    };
+    const getActiveRecipeSafe = () => {
+        try { return s?.activeRecipe ?? null; } catch (e) { return null; }
+    };
+    const selected = getSelectedRecipeSafe();
+    const active = getActiveRecipeSafe();
     if (s?.isActive && (active === recipe || selected === recipe)) {
         return { ok:true, alreadyActive:true, recipe: recipe?.name ?? recipeName };
     }
