@@ -69,10 +69,7 @@ def _print_list(data: dict) -> None:
 
 def _print_pool(data: dict) -> None:
     print(f"Skill: {data.get('skillName', 'Unknown')} ({data.get('realmName', 'Unknown Realm')})")
-    print(
-        f"Mastery Pool: {float(data.get('poolXP') or 0):.2f}/{float(data.get('poolCap') or 0):.2f} "
-        f"({_pool_percent(data):.2f}%)"
-    )
+    print(f"Pool: {float(data.get('poolXP') or 0):.2f}/{float(data.get('poolCap') or 0):.2f} ({float(data.get('poolProgress') or 0):.2f}%)")
     total = float(data.get("totalLevel") or 0)
     max_total = float(data.get("maxTotalLevel") or 0)
     pct = (total / max_total * 100.0) if max_total > 0 else 0.0
