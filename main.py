@@ -52,20 +52,17 @@ def _wait_for_cdp(cdp_port: int, timeout_s: int = 30) -> bool:
 
 
 def _select_character_via_daemon(daemon_port: int, slot: int = 1) -> bool:
-    deadline = time.time() + 45
+    deadline = time.time() + 120
     last_error = "unknown error"
     slot = max(1, int(slot))
     while time.time() < deadline and not _SHUTDOWN:
         resp = _daemon_request(
             daemon_port,
             {"op": "character.select", "slot": slot},
-            timeout_s=40,
+            timeout_s=100,
         )
         if resp.get("ok"):
-            if resp.get("alreadyInGame"):
-                print("Character already active.")
-            else:
-                print(f"Character selection command sent (slot {slot}).")
+            print(f"Character selection command sent (slot {slot}).")
             return True
         last_error = str(resp.get("error", "unknown error"))
         # Character page/data can be temporarily unavailable during boot.
@@ -76,6 +73,8 @@ def _select_character_via_daemon(daemon_port: int, slot: int = 1) -> bool:
             "Execution context was destroyed",
             "connect ECONNREFUSED",
             "retrieving websocket url",
+            "timed out",
+            "Character select not ready",
         )
         if not any(msg in last_error for msg in retryable):
             break
