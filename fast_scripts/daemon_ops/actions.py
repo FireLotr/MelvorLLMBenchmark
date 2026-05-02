@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from playwright.sync_api import Page
@@ -46,7 +47,12 @@ from js_actions.farming import (
 )
 from js_actions.mastery import MASTERY_SPEND_JS
 from js_actions.mining import MINING_START_JS, MINING_STOP_JS
-from js_actions.smithing import SMITHING_LIST_JS, SMITHING_START_JS, SMITHING_STOP_JS
+from js_actions.smithing import (
+    SMITHING_ACTION_INTERVAL_MS_JS,
+    SMITHING_LIST_JS,
+    SMITHING_START_JS,
+    SMITHING_STOP_JS,
+)
 from js_actions.woodcutting import WOODCUTTING_START_JS, WOODCUTTING_STATE_JS, WOODCUTTING_STOP_JS
 from _session import PAGES, navigate_fast
 from daemon_ops.errors import unsupported
@@ -97,7 +103,8 @@ def handle_action_call(page: Page, name: str, args: list[str]) -> dict[str, Any]
 
     if n in {"fishing", "woodcutting", "cooking", "smithing"}:
         if not args:
-            return {"ok": False, "error": f"{n} requires subcommand start|stop"}
+            sm = "start|start-one|stop" if n == "smithing" else "start|stop"
+            return {"ok": False, "error": f"{n} requires subcommand {sm}"}
         sub = args[0].strip().lower()
 
         if n == "fishing":
@@ -179,11 +186,11 @@ def handle_action_call(page: Page, name: str, args: list[str]) -> dict[str, Any]
             if sub == "stop":
                 data = page.evaluate(SMITHING_STOP_JS)
                 return {"ok": bool(data.get("ok")), "result": data}
-            if sub == "start":
+            if sub in {"start", "start-one"}:
                 if not navigate_fast(page, n, quiet=True):
                     return {"ok": False, "error": f"Could not navigate to {n}"}
                 if len(args) < 2:
-                    return {"ok": False, "error": "smithing start requires recipe name"}
+                    return {"ok": False, "error": f"smithing {sub} requires recipe name"}
                 q = _norm(" ".join(args[1:]))
                 rows = page.evaluate(SMITHING_LIST_JS)
                 exact = [r for r in rows if _norm(r["name"]) == q]
@@ -194,7 +201,43 @@ def handle_action_call(page: Page, name: str, args: list[str]) -> dict[str, Any]
                 if not t.get("unlocked"):
                     return {"ok": False, "error": f"Recipe locked: {t['name']}"}
                 data = page.evaluate(SMITHING_START_JS, t["name"])
-                return {"ok": bool((data or {}).get("ok")), "result": data, **({"error": data.get("error")} if isinstance(data, dict) and data.get("error") else {})}
+                if not (data or {}).get("ok"):
+                    return {
+                        "ok": False,
+                        "result": data,
+                        **({"error": data.get("error")} if isinstance(data, dict) and data.get("error") else {}),
+                    }
+                if (data or {}).get("alreadyActive"):
+                    return {
+                        "ok": False,
+                        "result": data,
+                        "error": "already smithing this recipe; stop first if you need a fresh start-one",
+                    }
+                if sub == "start":
+                    return {"ok": True, "result": data}
+                iv = page.evaluate(SMITHING_ACTION_INTERVAL_MS_JS)
+                if not (iv or {}).get("ok"):
+                    page.evaluate(SMITHING_STOP_JS)
+                    return {
+                        "ok": False,
+                        "result": {"start": data, "interval": iv},
+                        "error": (iv or {}).get("error") or "interval read failed",
+                    }
+                interval_ms = float(iv["intervalMs"])
+                wait_s = (interval_ms / 1000.0) * 1.3
+                time.sleep(wait_s)
+                stop = page.evaluate(SMITHING_STOP_JS)
+                stop_ok = bool(stop.get("ok")) or _norm(str(stop.get("error") or "")) == "not smithing now"
+                return {
+                    "ok": stop_ok,
+                    "result": {
+                        "start": data,
+                        "intervalMs": interval_ms,
+                        "waitSeconds": wait_s,
+                        "stop": stop,
+                    },
+                    **({} if stop_ok else {"error": stop.get("error") or "stop failed"}),
+                }
             return {"ok": False, "error": f"Unknown smithing subcommand: {sub}"}
 
     if n == "firemaking":

@@ -101,8 +101,13 @@ python fast_scripts/actions/cooking.py stop
 
 ```bash
 python fast_scripts/actions/smithing.py start "<recipe>"
+python fast_scripts/actions/smithing.py start-one "<recipe>"
 python fast_scripts/actions/smithing.py stop
 ```
+
+Notes:
+- **`start`** runs the recipe until you stop or resources run out.
+- **`start-one`** starts the recipe and stops aften one creation.
 
 ### firemaking
 
@@ -163,6 +168,24 @@ python fast_scripts/actions/combat.py "<monster or dungeon target>"
 python fast_scripts/observations/skills.py levels
 python fast_scripts/observations/skills.py active
 ```
+
+### goals
+
+Benchmark-style progress for the given goal.
+
+```bash
+python fast_scripts/observations/goals.py
+python fast_scripts/observations/goals.py easy
+python fast_scripts/observations/goals.py medium
+python fast_scripts/observations/goals.py all
+```
+
+| Goal | Skills | Dungeons |
+|------|--------|----------|
+| **easy** | Every skill in `lists.json` ≥ **60** | Each dungeon in `lists.json` cleared ≥ **once**, **except** Volcanic Cave |
+| **medium** | Every skill in `lists.json` ≥ **80** | Each dungeon in `lists.json` cleared ≥ **once** (including Volcanic Cave) |
+
+Output lists what is already met and what is still missing. Exit code **0** if every goal you asked for is complete, **1** if anything remains or `lists.json` is unusable, **2** if the daemon is unreachable.
 
 ### shop
 

@@ -57,6 +57,19 @@ SMITHING_START_JS = """
 }
 """
 
+# Smithing extends ArtisanSkill: interval lives on the skill (currentActionInterval / actionInterval / baseInterval).
+SMITHING_ACTION_INTERVAL_MS_JS = """
+() => {
+    const s = game?.smithing;
+    if (!s?.isActive) return { ok: false, error: "smithing not active" };
+    const ms = Number(s.currentActionInterval ?? s.actionInterval ?? s.baseInterval ?? NaN);
+    if (!Number.isFinite(ms) || ms <= 0) {
+        return { ok: false, error: "could not read action interval" };
+    }
+    return { ok: true, intervalMs: ms };
+}
+"""
+
 SMITHING_STOP_JS = """
 () => {
     const s = game?.smithing;

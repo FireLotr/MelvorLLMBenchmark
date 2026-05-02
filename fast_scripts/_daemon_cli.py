@@ -39,7 +39,7 @@ _ACTION_USAGE: dict[str, list[str]] = {
     "fishing": ["start <fish>", "stop"],
     "woodcutting": ["start <tree[,tree2]>", "stop"],
     "cooking": ["start <recipe>", "stop"],
-    "smithing": ["start <recipe>", "stop"],
+    "smithing": ["start <recipe>", "start-one <recipe>", "stop"],
     "firemaking": ["select <log>", "start <log>", "stop", "bonfire <start|stop> [log]"],
     "farming": [
         "harvest-all-game [allotment|herb|tree] (2k GP)",
