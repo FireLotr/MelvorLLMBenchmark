@@ -39,20 +39,61 @@ def _print_top(data: dict) -> None:
         print("Selected Fish by Area: none")
 
 
+def _fmt_pct_triplet(d: dict | None) -> str:
+    if not isinstance(d, dict):
+        return "?/?/?"
+
+    def fmt_one(x: object) -> str:
+        if x is None:
+            return "?"
+        try:
+            xf = float(x)
+        except (TypeError, ValueError):
+            return "?"
+        if xf == int(xf):
+            return str(int(xf))
+        s = f"{xf:.2f}".rstrip("0").rstrip(".")
+        return s or "0"
+
+    return f"{fmt_one(d.get('fish'))}/{fmt_one(d.get('junk'))}/{fmt_one(d.get('special'))}"
+
+
 def _print_list(data: dict) -> None:
     _print_top(data)
+    print(
+        "\nCatch odds are fish/junk/special (%). "
+        "Area line = base from the area; each fish tail = after mastery/modifiers for that fish."
+    )
     print("\nAreas and Fish:")
     for area in data.get("areas") or []:
-        print(f"\n{area.get('name', 'Unknown Area')}:")
-        for fish in area.get("fish") or []:
+        fish_rows = area.get("fish") or []
+        area_base: dict | None = None
+        for f in fish_rows:
+            cc = f.get("catchChances")
+            if isinstance(cc, dict) and isinstance(cc.get("areaBase"), dict):
+                area_base = cc["areaBase"]
+                break
+        base_s = _fmt_pct_triplet(area_base) if area_base else "?/?/?"
+        aname = area.get("name", "Unknown Area")
+        print(f"\n{aname} (Area base: {base_s}):")
+        for fish in fish_rows:
             status = "UNLOCKED" if fish.get("unlocked") else "LOCKED"
             min_ms = fish.get("minMs")
             max_ms = fish.get("maxMs")
             min_s = f"{float(min_ms) / 1000:.2f}s" if isinstance(min_ms, (int, float)) else "?"
             max_s = f"{float(max_ms) / 1000:.2f}s" if isinstance(max_ms, (int, float)) else "?"
+            cc = fish.get("catchChances")
+            if isinstance(cc, dict) and cc.get("error"):
+                trip = "?/?/?"
+            elif isinstance(cc, dict) and "fish" in cc:
+                trip = _fmt_pct_triplet(
+                    {"fish": cc.get("fish"), "junk": cc.get("junk"), "special": cc.get("special")}
+                )
+            else:
+                trip = "?/?/?"
             print(
                 f"- {fish.get('name', 'Unknown Fish')}: {status} | "
-                f"level {int(fish.get('level') or 0)} | {int(fish.get('xp') or 0)} XP | {min_s} - {max_s}"
+                f"level {int(fish.get('level') or 0)} | {int(fish.get('xp') or 0)} XP | {min_s} - {max_s} | {trip}"
             )
 
 

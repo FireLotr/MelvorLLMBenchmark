@@ -14,12 +14,77 @@ FISHING_LIST_JS = """() => {
         return null;
     })();
 
+    /** Matches Fishing.renderAreaUnlock — areas hidden in UI are not listable/startable here. */
+    const isFishingAreaUnlocked = (skill, area) => {
+        try {
+            if (!area) return false;
+            if (area.isSecret && !skill.secretAreaUnlocked) return false;
+            const g = skill.game ?? game;
+            if (area.requiredItem !== undefined && !g?.combat?.player?.equipment?.checkForItem?.(area.requiredItem)) return false;
+            if (area.poiRequirement !== undefined && !area.poiRequirement.isMet?.()) return false;
+            if (area.realm !== undefined && skill.currentRealm !== undefined && area.realm !== skill.currentRealm) return false;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
     const selected = f?.selectedAreaFish
-        ? Array.from(f.selectedAreaFish.entries()).map(([area, fish]) => ({
-              area: area?.name ?? "Unknown Area",
-              fish: fish?.name ?? "Unknown Fish",
-          }))
+        ? Array.from(f.selectedAreaFish.entries())
+              .filter(([area]) => isFishingAreaUnlocked(f, area))
+              .map(([area, fish]) => ({
+                  area: area?.name ?? "Unknown Area",
+                  fish: fish?.name ?? "Unknown Fish",
+              }))
         : [];
+
+    const clampValue = (val, min, max) => Math.min(Math.max(val, min), max);
+
+    /** Same logic as Fishing.getAreaChances(area), but for an explicit fish (modifier query / mastery). */
+    const chancesForFish = (fishing, area, fish) => {
+        let fishP = Number(area.fishChance ?? 0);
+        let specialP = Number(area.specialChance ?? 0);
+        let junkP = Number(area.junkChance ?? 0);
+        const g = fishing.game ?? game;
+        const fishToSpecialShift = Number(g.modifiers.fishingSpecialChance ?? 0);
+        const query = fishing.getActionModifierQuery(fish);
+        const noJunk = g.modifiers.getValue("melvorD:cannotFishJunk", query);
+        const bonusSpecialChance = Number(g.modifiers.getValue("melvorD:bonusFishingSpecialChance", query) ?? 0);
+
+        const addBonusSpecialChance = (amount) => {
+            let a = amount;
+            const junkToSpecialShift = clampValue(a, -specialP, junkP);
+            junkP -= junkToSpecialShift;
+            specialP += junkToSpecialShift;
+            a -= junkToSpecialShift;
+            const fishToSpec = clampValue(a, -specialP, fishP);
+            fishP -= fishToSpec;
+            specialP += fishToSpec;
+        };
+        addBonusSpecialChance(Number.isFinite(bonusSpecialChance) ? bonusSpecialChance : 0);
+
+        const sfs = clampValue(fishToSpecialShift, -specialP, fishP);
+        fishP -= sfs;
+        specialP += sfs;
+
+        if (noJunk) {
+            const jtf = clampValue(junkP, -fishP, junkP);
+            junkP -= jtf;
+            fishP += jtf;
+        }
+
+        const r2 = (n) => Math.round(Number(n) * 100) / 100;
+        return {
+            fish: r2(fishP),
+            junk: r2(junkP),
+            special: r2(specialP),
+            areaBase: {
+                fish: r2(Number(area.fishChance ?? 0)),
+                junk: r2(Number(area.junkChance ?? 0)),
+                special: r2(Number(area.specialChance ?? 0)),
+            },
+        };
+    };
 
     const enrichFishingFishFromGame = (areaRef, fishRef) => {
         let a = areaRef;
@@ -47,7 +112,9 @@ FISHING_LIST_JS = """() => {
         return { area: a, fish };
     };
 
-    const areas = (f?.areas?.allObjects ?? []).map((area) => ({
+    const areas = (f?.areas?.allObjects ?? [])
+        .filter((area) => isFishingAreaUnlocked(f, area))
+        .map((area) => ({
         name: area?.name ?? "Unknown Area",
         fish: (area?.fish ?? []).map((fish) => {
             let unlocked = false;
@@ -58,6 +125,12 @@ FISHING_LIST_JS = """() => {
             let maxInt = null;
             try { minInt = Number(f?.getMinFishInterval?.(fish)); } catch (e) {}
             try { maxInt = Number(f?.getMaxFishInterval?.(fish)); } catch (e) {}
+            let catchChances = null;
+            try {
+                catchChances = chancesForFish(f, area, fish);
+            } catch (e) {
+                catchChances = { error: String(e?.message ?? e) };
+            }
             return {
                 name: fish?.name ?? "Unknown Fish",
                 level: Number(fish?.level ?? 0),
@@ -65,6 +138,7 @@ FISHING_LIST_JS = """() => {
                 minMs: minInt,
                 maxMs: maxInt,
                 unlocked,
+                catchChances,
             };
         }),
     }));

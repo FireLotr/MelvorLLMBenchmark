@@ -5,7 +5,20 @@ FISHING_START_JS = """
     const norm = (s) => String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const f = game?.fishing;
     if (!f) return { ok:false, error:"no fishing" };
-    const areas = Array.from(f?.areas?.allObjects ?? []);
+    const isFishingAreaUnlocked = (skill, area) => {
+        try {
+            if (!area) return false;
+            if (area.isSecret && !skill.secretAreaUnlocked) return false;
+            const g = skill.game ?? game;
+            if (area.requiredItem !== undefined && !g?.combat?.player?.equipment?.checkForItem?.(area.requiredItem)) return false;
+            if (area.poiRequirement !== undefined && !area.poiRequirement.isMet?.()) return false;
+            if (area.realm !== undefined && skill.currentRealm !== undefined && area.realm !== skill.currentRealm) return false;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+    const areas = Array.from(f?.areas?.allObjects ?? []).filter((area) => isFishingAreaUnlocked(f, area));
     const all = areas.flatMap(area =>
         Array.from(area?.fish ?? []).map(fish => ({
             fish,
