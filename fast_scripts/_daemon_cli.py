@@ -71,6 +71,7 @@ _OBS_USAGE: dict[str, list[str]] = {
     "farming": ["plots"],
     "equipment": ["all", "equipped"],
     "combat": ["style", "hp", "autoeat", "stats", "enemy", "drops ...", "dungeon_completion"],
+    "goals": ["easy", "medium", "all"],
     "mastery": ["list <skill>", "pool <skill>", "unlocks <skill> [query]"],
 }
 
