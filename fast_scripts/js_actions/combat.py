@@ -22,16 +22,50 @@ COMBAT_FOOD_SLOT_JS = """
 
 COMBAT_LIST_JS = """
 () => {
-    const monsters = (game?.monsters?.allObjects ?? []).map((m) => ({
+    const byId = new Map();
+    for (const m of game?.monsters?.allObjects ?? []) {
+        const id = String(m?.id ?? "");
+        if (id) byId.set(id, m);
+    }
+    const skipOpenCombatArea = (a) => {
+        try {
+            return (typeof Dungeon !== "undefined" && a instanceof Dungeon)
+                || (typeof Stronghold !== "undefined" && a instanceof Stronghold);
+        } catch (e) {
+            return false;
+        }
+    };
+    const row = (m) => ({
         id: m?.id ?? "",
         name: m?.name ?? "Unknown",
         level: Number(m?.combatLevel ?? m?.level ?? 0),
-    }));
+    });
+    const areas = [];
+    const pushArea = (a, kind) => {
+        const name = String(a?.name ?? a?.id ?? "Unknown Area");
+        const monsters = [];
+        const seenMid = new Set();
+        for (const mm of Array.from(a?.monsters ?? [])) {
+            const id = String(mm?.id ?? "");
+            const full = id ? byId.get(id) : null;
+            const m = full ?? mm;
+            const mid = String(m?.id ?? id ?? "");
+            if (!mid || seenMid.has(mid)) continue;
+            seenMid.add(mid);
+            monsters.push(row(m));
+        }
+        monsters.sort((x, y) => x.level - y.level || String(x.name).localeCompare(String(y.name)));
+        if (monsters.length) areas.push({ name, kind, monsters });
+    };
+    for (const a of game?.combatAreas?.allObjects ?? []) {
+        if (!skipOpenCombatArea(a)) pushArea(a, "combat");
+    }
+    for (const a of game?.slayerAreas?.allObjects ?? []) pushArea(a, "slayer");
     const dungeons = (game?.dungeons?.allObjects ?? []).map((d) => ({
         id: d?.id ?? "",
         name: d?.name ?? "Unknown",
     }));
-    return { monsters, dungeons };
+    return { areas, dungeons };
 }
 """
 

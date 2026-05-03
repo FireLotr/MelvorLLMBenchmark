@@ -82,6 +82,39 @@ def _print_resp(resp: dict) -> None:
     print(json.dumps(resp, indent=2, ensure_ascii=True))
 
 
+def _print_combat_list_text(resp: dict) -> None:
+    """Human-readable combat list: areas with one monster per line; then dungeons."""
+    if not resp.get("ok"):
+        _print_resp(resp)
+        return
+    result = resp.get("result")
+    if not isinstance(result, dict):
+        _print_resp(resp)
+        return
+    areas = result.get("areas")
+    dungeons = result.get("dungeons")
+    if not isinstance(areas, list):
+        _print_resp(resp)
+        return
+    print("Areas (open combat):")
+    for ar in areas:
+        an = str(ar.get("name") or "?")
+        kind = str(ar.get("kind") or "combat")
+        label = f"{an} [{kind}]" if kind not in {"", "combat"} else an
+        print(label)
+        for m in ar.get("monsters") or []:
+            mn = str(m.get("name") or "?")
+            lv = int(m.get("level") or 0)
+            print(f"  {mn} (lvl {lv})")
+    print()
+    print("Dungeons:")
+    if isinstance(dungeons, list):
+        for d in sorted(dungeons, key=lambda x: str(x.get("name") or "")):
+            print(f"  {d.get('name', '?')}")
+    else:
+        print("  (none)")
+
+
 def _print_usage(kind: str, name: str) -> None:
     table = _ACTION_USAGE if kind == "action" else _OBS_USAGE
     cmds = table.get(name, [])
@@ -119,7 +152,10 @@ def run_action_cli(action_name: str, argv: list[str]) -> int:
         log_action_result(action_name, argv, False, {"error": msg})
         return 2
 
-    _print_resp(resp)
+    if action_name == "combat" and len(argv) == 1 and argv[0].strip().lower() == "list":
+        _print_combat_list_text(resp)
+    else:
+        _print_resp(resp)
     log_action_result(action_name, argv, bool(resp.get("ok")), resp)
     return 0 if resp.get("ok") else 1
 
