@@ -12,6 +12,41 @@ from _daemon_client import daemon_send
 from _logging import log_observation, log_observation_result
 
 
+def _norm_skill(name: object) -> str:
+    return str(name or "").strip().lower()
+
+
+# Display order: combat, fish/cook, mine/smith, wc/fire, farm, then other skills; unknown names last (A–Z).
+_SKILL_LEVELS_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("attack", "strength", "defence", "hitpoints", "ranged", "magic", "prayer", "slayer"),
+    ("fishing", "cooking"),
+    ("mining", "smithing"),
+    ("woodcutting", "firemaking"),
+    ("farming",),
+    ("thieving", "crafting", "fletching", "runecrafting", "herblore", "agility", "summoning", "astrology", "township"),
+)
+
+_SKILL_ORDER_INDEX: dict[str, int] = {}
+for _grp in _SKILL_LEVELS_GROUPS:
+    for _name in _grp:
+        _SKILL_ORDER_INDEX[_name] = len(_SKILL_ORDER_INDEX)
+
+
+def _canonical_skill_name(name: object) -> str:
+    raw = _norm_skill(name)
+    return {"defense": "defence", "hp": "hitpoints"}.get(raw, raw)
+
+
+def _sort_skills_for_display(skills: list[dict]) -> list[dict]:
+    def key(s: dict) -> tuple[int, int, str]:
+        nm = _canonical_skill_name(s.get("name"))
+        if nm in _SKILL_ORDER_INDEX:
+            return (0, _SKILL_ORDER_INDEX[nm], "")
+        return (1, 0, nm)
+
+    return sorted(skills, key=key)
+
+
 def _usage() -> None:
     print("Usage:")
     print("  python fast_scripts/observations/skills.py levels")
@@ -19,7 +54,7 @@ def _usage() -> None:
 
 
 def _print_levels(result: dict) -> None:
-    skills = result.get("skills") or []
+    skills = _sort_skills_for_display(list(result.get("skills") or []))
     if not skills:
         print("No allowed skills found.")
         return
@@ -30,7 +65,7 @@ def _print_levels(result: dict) -> None:
         lvl = int(s.get("level") or 0)
         xp = int(s.get("xp") or 0)
         xtn = s.get("xpToNext")
-        next_col = "—" if xtn is None else f"{int(xtn):,}"
+        next_col = "-" if xtn is None else f"{int(xtn):,}"
         print(f"{str(s.get('name') or 'Unknown')[:24]:24} {lvl:>8} {xp:>14,} {next_col:>12}")
 
 
@@ -43,7 +78,7 @@ def _print_active(result: dict) -> None:
     for a in activities:
         skill = a.get("skill") or "Unknown"
         detail = a.get("detail") or "active"
-        print(f"- {skill} — {detail}")
+        print(f"- {skill} - {detail}")
 
 
 def format_output(cmd: str, result: dict, argv: list[str] | None = None) -> str:
