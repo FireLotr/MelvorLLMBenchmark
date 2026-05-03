@@ -119,7 +119,7 @@ def _evaluate_goal(
     for name in req_dungeons:
         key = _norm(name)
         c = int(completions.get(key, 0))
-        label = f"{name}: {c} completion(s) (need ≥1)"
+        label = f"{name}: {c} completion(s) (need >=1)"
         if c >= 1:
             d_done.append(label)
         else:
@@ -136,24 +136,24 @@ def _print_goal_block(spec: GoalSpec, result: tuple[bool, list[str], list[str], 
     print("Skills:")
     print("  Done:")
     for line in sk_done:
-        print(f"    ✓ {line}")
+        print(f"    [x] {line}")
     if not sk_done:
         print("    (none yet)")
     print("  Still need level %s:" % spec.skill_min)
     for line in sk_todo:
-        print(f"    · {line}")
+        print(f"    [-] {line}")
     if not sk_todo:
         print("    (all met)")
     print()
     print("Dungeons:")
-    print("  Done (≥1 clear):")
+    print("  Done (>=1 clear):")
     for line in dg_done:
-        print(f"    ✓ {line}")
+        print(f"    [x] {line}")
     if not dg_done:
         print("    (none yet)")
     print("  Still need a clear:")
     for line in dg_todo:
-        print(f"    · {line}")
+        print(f"    [-] {line}")
     if not dg_todo:
         print("    (all met)")
     print()
@@ -163,9 +163,9 @@ def _usage() -> None:
     print("Usage:")
     print("  python fast_scripts/observations/goals.py [easy|medium|all]")
     print()
-    print("  easy   — all skills in lists.json ≥60; each lists.json dungeon ≥1 clear except Volcanic Cave")
-    print("  medium — all skills in lists.json ≥80; each lists.json dungeon ≥1 clear")
-    print("  all    — report both (default)")
+    print("  easy   - all skills in lists.json >=60; each lists.json dungeon >=1 clear except Volcanic Cave")
+    print("  medium - all skills in lists.json >=80; each lists.json dungeon >=1 clear")
+    print("  all    - report both (default)")
 
 
 def main() -> int:
@@ -215,7 +215,7 @@ def main() -> int:
         _print_goal_block(spec, result)
         summary_lines.append(f"{spec.name}: {'COMPLETE' if complete else 'in progress'}")
 
-    print("— Summary:", "; ".join(summary_lines))
+    print("-- Summary:", "; ".join(summary_lines))
     details = "\n".join(summary_lines)
     log_observation_result("goals", [which], True, result={"summary": summary_lines}, details=details)
     return 0 if all_complete else 1
