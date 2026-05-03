@@ -98,6 +98,32 @@ BANK_EQUIP_JS = """
     } catch (e) {
       return { ok:false, error:`equipCallback failed: ${String(e)}` };
     }
+    const slotsEq = p?.equipment?.equippedArray ?? [];
+    const slotId = String(slot?.id ?? slot?.localID ?? "");
+    let rec = slotsEq.find((e) => {
+      if (e?.slot === slot) return true;
+      const eid = String(e?.slot?.id ?? e?.slot?.localID ?? "");
+      return Boolean(slotId) && eid === slotId;
+    });
+    if (!rec) {
+      const target = norm(String(slot?.name ?? slot?.localID ?? slot?.id ?? ""));
+      const cands = slotsEq.filter((e) => {
+        const k = norm(String(e?.slot?.name ?? e?.slot?.localID ?? e?.slot?.id ?? ""));
+        return k === target || k.includes(target) || target.includes(k);
+      });
+      rec = cands.length === 1 ? cands[0] : null;
+    }
+    const wantId = String(hit.item?.id ?? "");
+    const gotId = String(rec?.item?.id ?? "");
+    const idOk = wantId && gotId === wantId;
+    const nameOk = !wantId && norm(String(rec?.item?.name ?? "")) === norm(String(hit.item?.name ?? ""));
+    if (!rec || !(idOk || nameOk)) {
+      return {
+        ok:false,
+        error:"item was not equipped - requirements may not be met (e.g. skill level), or another condition blocked the equip",
+        item: hit?.item?.name ?? itemName,
+      };
+    }
     return { ok:true, item: hit?.item?.name ?? itemName };
 }
 """
