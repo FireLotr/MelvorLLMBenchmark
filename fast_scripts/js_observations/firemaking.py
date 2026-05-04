@@ -40,11 +40,18 @@ FIREMAKING_LIST_JS = """() => {
     const rows = (f?.actions?.allObjects ?? []).map((a) => {
         let unlocked = false;
         try { unlocked = !!f?.isMasteryActionUnlocked?.(a); } catch (e) {}
+        let interval = Number(a?.baseInterval ?? 0);
+        try {
+            if (typeof f?.modifyInterval === "function") {
+                const realInterval = Number(f.modifyInterval(a?.baseInterval ?? 0, a));
+                if (Number.isFinite(realInterval) && realInterval > 0) interval = realInterval;
+            }
+        } catch (e) {}
         return {
             name: a?.name ?? "Unknown",
             level: Number(a?.level ?? 0),
             xp: Number(a?.baseExperience ?? 0),
-            interval: Number(a?.baseInterval ?? 0),
+            interval,
             unlocked,
         };
     });
