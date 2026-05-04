@@ -6,8 +6,14 @@ FIREMAKING_BONFIRE_START_JS = """
     const f = game?.firemaking;
     if (!f) return { ok:false, error:"no firemaking" };
     if (typeof f?.lightBonfire !== "function") return { ok:false, error:"lightBonfire is unavailable" };
+    const safeActiveRecipe = () => {
+        try { return f.activeRecipe ?? null; } catch (e) { return null; }
+    };
+    const safeSelectedRecipe = () => {
+        try { return f.selectedRecipe ?? null; } catch (e) { return null; }
+    };
     const q = norm(query);
-    let selectedRecipe = f?.selectedRecipe ?? f?.activeRecipe ?? null;
+    let selectedRecipe = safeSelectedRecipe() ?? safeActiveRecipe();
     if (q) {
         const actions = Array.from(f?.actions?.allObjects ?? []);
         const exact = actions.filter((a) => norm(a?.name) === q);
@@ -93,6 +99,16 @@ FIREMAKING_START_JS = """
     if (!f) return { ok:false, error:"no firemaking" };
     if (typeof f?.burnLog !== "function") return { ok:false, error:"burnLog is unavailable" };
 
+    const safeActiveRecipe = () => {
+        try { return f.activeRecipe ?? null; } catch (e) { return null; }
+    };
+    const safeSelectedRecipe = () => {
+        try { return f.selectedRecipe ?? null; } catch (e) { return null; }
+    };
+    const safeSelectedLog = () => {
+        try { return f.selectedLog ?? null; } catch (e) { return null; }
+    };
+
     const q = norm(query);
     const actions = Array.from(f?.actions?.allObjects ?? []);
     let wanted = null;
@@ -106,9 +122,9 @@ FIREMAKING_START_JS = """
         }
     }
 
-    const selected = f?.selectedRecipe ?? f?.activeRecipe ?? f?.selectedLog ?? null;
+    const selected = safeSelectedRecipe() ?? safeActiveRecipe() ?? safeSelectedLog();
     const sameWantedSelected = !!wanted && selected === wanted;
-    const activeRecipe = f?.activeRecipe ?? null;
+    const activeRecipe = safeActiveRecipe();
     const sameWantedActive = !!wanted && activeRecipe === wanted;
 
     if (f?.isActive && (sameWantedActive || sameWantedSelected || !wanted)) {
@@ -127,7 +143,13 @@ FIREMAKING_START_JS = """
 
     try { f.burnLog(); } catch (e) { return { ok:false, error:String(e?.message ?? e) }; }
     if (!f?.isActive) return { ok:false, error:"start did not apply" };
-    return { ok:true, started:true, log:(wanted?.name ?? (f?.activeRecipe?.name ?? f?.selectedRecipe?.name ?? null)) };
+    let logName = wanted?.name ?? null;
+    if (!logName) {
+        const ar = safeActiveRecipe();
+        const sr = safeSelectedRecipe();
+        logName = ar?.name ?? sr?.name ?? null;
+    }
+    return { ok:true, started:true, log: logName };
 }
 """
 
