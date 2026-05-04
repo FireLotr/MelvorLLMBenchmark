@@ -31,6 +31,22 @@ COMBAT_FOOD_SLOT_READ_JS = """() => {
         if (Number.isFinite(n) && n >= 1 && n <= 3) return n;    // already 1-based
         return null;
     };
+    const readSlotQty = (slotNum) => {
+        const idx = Number(slotNum) - 1;
+        if (!Number.isFinite(idx) || idx < 0 || idx >= slots.length) return null;
+        const q = Number(slots[idx]?.quantity ?? NaN);
+        return Number.isFinite(q) ? q : null;
+    };
+    const buildResult = (slotNum, source, raw) => {
+        const qty = readSlotQty(slotNum);
+        return {
+            ok: true,
+            activeFoodSlot: slotNum,
+            activeFoodQty: qty,
+            source,
+            raw,
+        };
+    };
 
     const fields = {
         selectedSlot: f?.selectedSlot ?? null,
@@ -39,7 +55,7 @@ COMBAT_FOOD_SLOT_READ_JS = """() => {
     };
     for (const [name, raw] of Object.entries(fields)) {
         const slot = asSlotNum(raw);
-        if (slot) return { ok:true, activeFoodSlot: slot, source: `food.${name}`, raw };
+        if (slot) return buildResult(slot, `food.${name}`, raw);
     }
 
     const sf = p?.selectedFood;
@@ -48,7 +64,7 @@ COMBAT_FOOD_SLOT_READ_JS = """() => {
     if (m) {
         const n = Number(m[1]);
         if (Number.isFinite(n) && n >= 1 && n <= 3) {
-            return { ok:true, activeFoodSlot: n, source: "player.selectedFood.slot", raw: sid };
+            return buildResult(n, "player.selectedFood.slot", sid);
         }
     }
 
@@ -60,12 +76,12 @@ COMBAT_FOOD_SLOT_READ_JS = """() => {
             const id = String(s?.item?.id ?? "");
             const q = Number(s?.quantity ?? NaN);
             if (id && id === sfID && (!Number.isFinite(sfQty) || q === sfQty)) {
-                return { ok:true, activeFoodSlot: i + 1, source: "selectedFood.item+qty", raw: sfID };
+                return buildResult(i + 1, "selectedFood.item+qty", sfID);
             }
         }
         for (let i = 0; i < slots.length; i++) {
             if (String(slots[i]?.item?.id ?? "") === sfID) {
-                return { ok:true, activeFoodSlot: i + 1, source: "selectedFood.item", raw: sfID };
+                return buildResult(i + 1, "selectedFood.item", sfID);
             }
         }
     }

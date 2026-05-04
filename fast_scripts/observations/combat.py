@@ -69,8 +69,13 @@ def _print_food_slot(result: dict) -> None:
         print(result.get("error") or "Could not read active food slot.")
         return
     slot = result.get("activeFoodSlot")
+    qty = result.get("activeFoodQty")
     if isinstance(slot, (int, float)):
         print(f"Active Food Slot: {int(slot)}")
+        if isinstance(qty, (int, float)):
+            print(f"Active Food Qty: {int(qty)}")
+        else:
+            print("Active Food Qty: unavailable")
     else:
         print("Active Food Slot: unavailable")
 
