@@ -84,13 +84,18 @@ FARMING_PLOTS_JS = '''() => {
             const xp = Number(recipe?.baseExperience ?? 0);
             const intervalMs = Number(recipe?.baseInterval ?? 0);
             let state = "empty";
-            if (plot?.plantedRecipe) {
+            if (stateNum === 2) {
                 const growthLeft = Number(
                     (typeof f?.getPlotGrowthTime === "function" ? f.getPlotGrowthTime(plot) : 0) ?? 0
                 );
-                if (Number.isFinite(growthLeft) && growthLeft > 0) state = `growing (${formatGrowing(growthLeft)})`;
-                else state = "ready";
-            } else if (stateNum >= 3) {
+                if (Number.isFinite(growthLeft) && growthLeft > 0) {
+                    state = `growing (${formatGrowing(growthLeft)})`;
+                } else {
+                    state = "growing";
+                }
+            } else if (stateNum === 3) {
+                state = "ready";
+            } else if (stateNum === 4) {
                 state = "dead";
             }
             plots.push({
