@@ -103,6 +103,21 @@ READ_JS: dict[str, str] = {
     maxHp: Number(c?.stats?._maxHitpoints ?? c?.stats?.maxHitpoints ?? 0)
   };
 }""",
+    "account_age": r"""() => {
+  try {
+    const general = game?.stats?.General;
+    if (!general?.get) return { ok: false, error: "no general stats" };
+    const created = Number(general.get((typeof GeneralStats !== "undefined" ? GeneralStats.AccountCreationDate : 3)));
+    if (!Number.isFinite(created) || created <= 0) return { ok: false, error: "account creation date unavailable" };
+    const elapsedMs = Math.max(0, Date.now() - created);
+    const accountAge = typeof formatAsTimePeriod === "function"
+      ? formatAsTimePeriod(elapsedMs)
+      : `${Math.floor(elapsedMs / 86400000)}d`;
+    return { ok: true, accountAge, accountCreationTimestampMs: created, elapsedMs };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}""",
 }
 
 MASTERY_BRIEF_JS = r"""(skillKey) => {

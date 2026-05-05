@@ -53,6 +53,29 @@ def _spec_medium() -> GoalSpec:
     return GoalSpec(name="medium", skill_min=80, dungeon_exclusions=frozenset())
 
 
+def _fetch_account_age() -> str | None:
+    resp = daemon_send({"op": "read", "kind": "account_age"})
+    if not resp.get("ok"):
+        return None
+    data = resp.get("result") or {}
+    if not data.get("ok", True):
+        return None
+    s = str(data.get("accountAge") or "").strip()
+    return s or None
+
+
+def _print_account_age_header() -> None:
+    try:
+        age = _fetch_account_age()
+    except Exception:
+        age = None
+    if age:
+        print(f"Account age: {age}")
+    else:
+        print("Account age: (unavailable)")
+    print()
+
+
 def _fetch_skills() -> dict:
     resp = daemon_send({"op": "observation.call", "name": "skills", "args": ["levels"]})
     if not resp.get("ok"):
@@ -174,6 +197,9 @@ def main() -> int:
     if which in {"-h", "--help", "help"}:
         _usage()
         return 0
+
+    _print_account_age_header()
+
     if which not in {"easy", "medium", "all"}:
         _usage()
         return 1
