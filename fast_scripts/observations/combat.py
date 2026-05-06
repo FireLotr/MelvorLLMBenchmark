@@ -123,6 +123,28 @@ def _print_enemy(result: dict) -> None:
     at = result.get("attackType")
     if at:
         print(f"Attack Type: {at}")
+    sas = result.get("specialAttacks")
+    if isinstance(sas, list):
+        if sas:
+            print("Special Attacks:")
+            for sa in sas:
+                if not isinstance(sa, dict):
+                    continue
+                sid = sa.get("id")
+                nm = str(sa.get("name") or ("Unknown" if not sid else f"Unknown ({sid})"))
+                ch = sa.get("chance")
+                if isinstance(ch, (int, float)):
+                    print(f"- {nm} ({float(ch):.2f}% chance)")
+                else:
+                    print(f"- {nm}")
+                desc = sa.get("description")
+                if isinstance(desc, str) and desc.strip():
+                    d = desc.strip().replace("\n", " ")
+                    if len(d) > 160:
+                        d = d[:157] + "..."
+                    print(f"  {d}")
+        else:
+            print("Special Attacks: (none)")
     print(f"Enemy Min/Max Hit: {int(result.get('minHit') or 0)} / {int(result.get('maxHit') or 0)}")
     print(f"Enemy Accuracy: {int(result.get('accuracy') or 0)}")
     print(f"Enemy Defence: {int(result.get('defenceLevel') or 0)}")

@@ -315,6 +315,142 @@ COMBAT_ENEMY_READ_JS = """() => {
     }
     const playerHitChance = Number(ps.hitChance ?? ps._hitChance ?? NaN);
     const enemyHitChance = Number(es.hitChance ?? es._hitChance ?? NaN);
+    const monster = e?.monster ?? null;
+    const normalizeSpecialList = (raw) => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw.slice();
+        if (raw instanceof Set) return Array.from(raw);
+        if (raw instanceof Map) {
+            return Array.from(raw.entries()).map(([k, v]) => {
+                if (v && typeof v === "object") return v;
+                return { id: k, chance: v };
+            });
+        }
+        if (typeof raw === "object") {
+            const keys = Object.keys(raw)
+                .filter((k) => /^\\d+$/.test(k))
+                .sort((a, b) => Number(a) - Number(b));
+            if (keys.length) return keys.map((k) => raw[k]);
+            const vals = Object.values(raw);
+            // If object is dictionary-like {attackID: chance}, preserve keys as ids.
+            const allPrimitiveVals = vals.every(
+                (v) => v == null || typeof v === "number" || typeof v === "string" || typeof v === "boolean"
+            );
+            if (allPrimitiveVals) return Object.entries(raw).map(([k, v]) => ({ id: k, chance: v }));
+            return vals;
+        }
+        return [];
+    };
+    const extractAttackId = (entry) => {
+        if (entry == null) return null;
+        if (typeof entry !== "object") return entry;
+        const direct = [
+            entry.id,
+            entry.attackID,
+            entry.specialAttackID,
+            entry.effectID,
+            entry.tableID,
+            entry.localID,
+            entry._localID,
+        ];
+        for (const v of direct) {
+            if (v != null && String(v) !== "") return v;
+        }
+        const nested = [entry.attack, entry.specialAttack, entry.effect];
+        for (const n of nested) {
+            if (!n) continue;
+            if (typeof n === "string" || typeof n === "number") return n;
+            if (typeof n === "object") {
+                const nv = n.id ?? n.attackID ?? n.specialAttackID ?? n.localID ?? n._localID ?? null;
+                if (nv != null && String(nv) !== "") return nv;
+            }
+        }
+        return null;
+    };
+    const resolveAttackRegistry = (id) => {
+        if (id == null || id === "") return null;
+        const idStr = typeof id === "object" && id !== null ? String(id.id ?? "") : String(id);
+        if (!idStr) return null;
+        const regs = [game?.attacks, game?.enemySpecialAttacks, game?.specialAttacks].filter(Boolean);
+        for (const reg of regs) {
+            if (typeof reg.getObjectByID === "function") {
+                try {
+                    const hit = reg.getObjectByID(idStr);
+                    if (hit) return hit;
+                } catch (err) {}
+                try {
+                    const hit2 = reg.getObjectByID(id);
+                    if (hit2) return hit2;
+                } catch (err2) {}
+            }
+            const all = reg?.allObjects;
+            if (Array.isArray(all)) {
+                const hit = all.find(
+                    (a) =>
+                        String(a?.id ?? "") === idStr ||
+                        String(a?.localID ?? "") === idStr ||
+                        String(a?._localID ?? "") === idStr ||
+                        a === id
+                );
+                if (hit) return hit;
+            }
+        }
+        return null;
+    };
+    const buildSpecialAttacks = () => {
+        if (!monster) return [];
+        const rawList = normalizeSpecialList(monster.specialAttacks ?? monster._specialAttacks);
+        const ovList = normalizeSpecialList(monster.overrideSpecialChances);
+        const out = [];
+        for (let i = 0; i < rawList.length; i++) {
+            const entry = rawList[i];
+            let idVal = null;
+            let nameGuess = null;
+            let descGuess = null;
+            let defaultCh = null;
+            if (entry && typeof entry === "object") {
+                idVal = extractAttackId(entry);
+                nameGuess =
+                    entry.name ??
+                    entry.attackName ??
+                    entry.specialAttackName ??
+                    entry.attack?.name ??
+                    entry.specialAttack?.name ??
+                    null;
+                descGuess =
+                    entry.description ??
+                    entry.attack?.description ??
+                    entry.specialAttack?.description ??
+                    null;
+                const dc = Number(entry.defaultChance ?? entry.chance ?? NaN);
+                if (Number.isFinite(dc)) defaultCh = dc;
+            } else {
+                idVal = entry;
+            }
+            const regAtt = resolveAttackRegistry(idVal);
+            const name =
+                regAtt?.name ??
+                regAtt?._name ??
+                nameGuess ??
+                (idVal != null && String(idVal).trim() ? String(idVal) : "Unknown");
+            const desc = regAtt?.description ?? regAtt?._description ?? descGuess ?? null;
+            let chance = defaultCh;
+            const regDc = Number(regAtt?.defaultChance ?? NaN);
+            if (!Number.isFinite(chance) && Number.isFinite(regDc)) chance = regDc;
+            if (i < ovList.length) {
+                const oc = Number(ovList[i]);
+                if (Number.isFinite(oc)) chance = oc;
+            }
+            out.push({
+                id: idVal != null ? String(idVal) : null,
+                name,
+                chance: Number.isFinite(chance) ? chance : null,
+                description: typeof desc === "string" && desc.trim() ? desc.trim() : null,
+            });
+        }
+        return out;
+    };
+    const specialAttacks = buildSpecialAttacks();
     return {
         ok:true,
         name: e?.monster?.name ?? e?.name ?? null,
@@ -331,6 +467,7 @@ COMBAT_ENEMY_READ_JS = """() => {
         damageReduction: Number.isFinite(enemyDR) ? enemyDR : null,
         playerHitChance: Number.isFinite(playerHitChance) ? playerHitChance : null,
         enemyHitChance: Number.isFinite(enemyHitChance) ? enemyHitChance : null,
+        specialAttacks,
     };
 }"""
 
